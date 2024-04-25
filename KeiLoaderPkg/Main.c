@@ -156,6 +156,10 @@ const CHAR16* GetPixelFormatUnicode(EFI_GRAPHICS_PIXEL_FORMAT fmt){
 
 }
 
+void Halt(void){
+    while (1) __asm__("hlt");
+}
+
 EFI_STATUS EFIAPI UefiMain(
     EFI_HANDLE image_handle,
     EFI_SYSTEM_TABLE *system_table) {
@@ -193,7 +197,7 @@ EFI_STATUS EFIAPI UefiMain(
 
     UINT8* frame_buffer = (UINT8*)gop->Mode->FrameBufferBase;
     for (UINTN i = 0;i < gop->Mode->FrameBufferSize;++i){
-        frame_buffer[i] = 128;
+        frame_buffer[i] = 255;
     }
 
 
@@ -215,11 +219,19 @@ EFI_STATUS EFIAPI UefiMain(
     //カーネルファイルが置かれるメモリの先頭を指定
     EFI_PHYSICAL_ADDRESS kernel_base_addr = 0x100000;
     //ファイルを格納できるメモリを確保
-    gBS->AllocatePages(
+    status = gBS->AllocatePages(
         AllocateAddress,EfiLoaderData,(kernel_file_size+0xfff)/0x1000,&kernel_base_addr
     );
+    if (EFI_ERROR(status)){
+        Print(L"failed to allocate pages: %r",status);
+        Halt();
+    }
     //カーネルファイルを読み込み
-    kernel_file->Read(kernel_file,&kernel_file_size,(VOID*)kernel_base_addr);
+    status = kernel_file->Read(kernel_file,&kernel_file_size,(VOID*)kernel_base_addr);
+    if (EFI_ERROR(status)){
+        Print(L"error: %r",status);
+        Halt();
+    }
     Print(L"Kernel: 0x%0lx (%lu bytes)\n",kernel_base_addr,kernel_file_size);
 
 
@@ -230,12 +242,12 @@ EFI_STATUS EFIAPI UefiMain(
         status = GetMemoryMap(&memmap);
         if(EFI_ERROR(status)){
             Print(L"Failed to get memory map: %r\n",status);
-            while(1);
+            Halt();
         }
         status = gBS->ExitBootServices(image_handle,memmap.map_key);
         if(EFI_ERROR(status)){
             Print(L"Cloud not exit boot service: %r\n",status);
-            while(1);
+            Halt();
         }
     }
 
