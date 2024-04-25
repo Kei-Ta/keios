@@ -163,6 +163,7 @@ void Halt(void){
 EFI_STATUS EFIAPI UefiMain(
     EFI_HANDLE image_handle,
     EFI_SYSTEM_TABLE *system_table) {
+    EFI_STATUS status;
     Print(L"Hello, Kei World!\n");
 
     CHAR8 memmap_buf[4096 * 4];
@@ -235,7 +236,7 @@ EFI_STATUS EFIAPI UefiMain(
     Print(L"Kernel: 0x%0lx (%lu bytes)\n",kernel_base_addr,kernel_file_size);
 
 
-    EFI_STATUS status;
+    
     //ブートサービスの停止
     status = gBS->ExitBootServices(image_handle,memmap.map_key);
     if(EFI_ERROR(status)){
