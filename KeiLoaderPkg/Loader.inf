@@ -22,5 +22,7 @@
     gEfiFileInfoGuid
 
 [Protocols]
-    gEfiLoadedImageProtocolGuid
+  gEfiLoadedImageProtocolGuid
+  gEfiLoadFileProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
     

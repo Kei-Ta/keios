@@ -8,6 +8,7 @@
 #include  <Protocol/DiskIo2.h>
 #include  <Protocol/BlockIo.h>
 #include  <Guid/FileInfo.h>
+#include "frame_buffer_config.hpp"
 
 struct MemoryMap {
     UINTN buffer_size;
@@ -181,7 +182,11 @@ EFI_STATUS EFIAPI UefiMain(
     memmap_file->Close(memmap_file);
 
     EFI_GRAPHICS_OUTPUT_PROTOCOL* gop;
-    OpenGOP(image_handle, &gop); //ポインタのポインタを渡してる
+    status = OpenGOP(image_handle, &gop); //ポインタのポインタを渡してる
+    if (EFI_ERROR(status)){
+        Print(L"failed to open GOP: %r\n",status);
+        Halt();
+    }
 
     Print(L"Resolution: %ux%u, Pixel Format: %s, %u pixels/line\n",
         gop->Mode->Info->HorizontalResolution,
@@ -198,15 +203,17 @@ EFI_STATUS EFIAPI UefiMain(
 
     UINT8* frame_buffer = (UINT8*)gop->Mode->FrameBufferBase;
     for (UINTN i = 0;i < gop->Mode->FrameBufferSize;++i){
-        frame_buffer[i] = 255;
+        frame_buffer[i] = 0;
     }
 
-
     EFI_FILE_PROTOCOL* kernel_file;
-    root_dir->Open(
+    status = root_dir->Open(
         root_dir,&kernel_file,L"\\kernel.elf",EFI_FILE_MODE_READ,0
     );
-
+        if (EFI_ERROR(status)){
+        Print(L"failed to open file kernel.elf: %r\n",status);
+        Halt();
+    }
     UINTN file_info_size = sizeof(EFI_FILE_INFO) + sizeof(CHAR16)*12;
     UINT8 file_info_buffer[file_info_size];
 
@@ -214,6 +221,10 @@ EFI_STATUS EFIAPI UefiMain(
     kernel_file->GetInfo(
         kernel_file,&gEfiFileInfoGuid,&file_info_size,file_info_buffer
     );
+    if (EFI_ERROR(status)){
+        Print(L"failed to get file info: %r\n",status);
+        Halt();
+    }
 
     EFI_FILE_INFO* file_info = (EFI_FILE_INFO*)file_info_buffer;
     UINTN kernel_file_size = file_info->FileSize;
@@ -254,9 +265,30 @@ EFI_STATUS EFIAPI UefiMain(
 
     UINT64 entry_addr = *(UINT64*)(kernel_base_addr + 24);
 
-    typedef void EntryPointType(UINT64,UINT64);
+    struct FrameBufferConfig config = {
+        (UINT8*)gop->Mode->FrameBufferBase,
+        gop->Mode->Info->PixelsPerScanLine,
+        gop->Mode->Info->HorizontalResolution,
+        gop->Mode->Info->VerticalResolution,
+        0
+    };
+
+    switch(gop->Mode->Info->PixelFormat){
+        case PixelRedGreenBlueReserved8BitPerColor:
+            config.pixel_format = kPixelRGBResv8BitPerColor;
+            break;
+        case PixelBlueGreenRedReserved8BitPerColor:
+            config.pixel_format = kPixelBGRResv8BitPerColor;
+            break;
+        default:
+            Print(L"Unimplemented pixel format: %d\n",gop->Mode->Info->PixelFormat);
+            Halt();
+    }
+
+
+    typedef void EntryPointType(const struct FrameBufferConfig*);
     EntryPointType* entry_point = (EntryPointType*)entry_addr;
-    entry_point(gop->Mode->FrameBufferBase,gop->Mode->FrameBufferSize);
+    entry_point(&config);
 
     Print(L"ALL done\n");
 
